@@ -14,24 +14,40 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download ps3dev toolchain
-        run: |
-          wget -q https://github.com/bucanero/ps3toolchain/releases/download/ubuntu-latest-fad3b5fb/ps3dev-ubuntu-latest-2020-08-31.tar.gz
-          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C /usr/local
-          rm ps3dev-ubuntu-latest-2020-08-31.tar.gz
-
-      - name: Set environment
-        run: |
-          echo "PS3DEV=/usr/local/ps3dev"  >> $GITHUB_ENV
-          echo "PSL1GHT=/usr/local/ps3dev" >> $GITHUB_ENV
-          echo "/usr/local/ps3dev/bin"      >> $GITHUB_PATH
-          echo "/usr/local/ps3dev/ppu/bin"  >> $GITHUB_PATH
-
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install -y python2 libelf-dev zlib1g-dev
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          sudo apt install -y \
+            build-essential autoconf automake bison flex \
+            libgmp-dev libmpfr-dev libmpc-dev \
+            libelf-dev zlib1g-dev libtool \
+            python3 python-is-python3 \
+            wget git texinfo gettext
+
+      - name: Cache ps3dev toolchain
+        id: cache-ps3dev
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/ps3dev
+          key: ps3dev-toolchain-v1
+
+      - name: Build ps3toolchain
+        if: steps.cache-ps3dev.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/ps3dev/ps3toolchain.git
+          cd ps3toolchain
+          export PS3DEV=/usr/local/ps3dev
+          export PSL1GHT=$PS3DEV
+          export PATH=$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin
+          sudo -E bash toolchain.sh 2>&1
+
+      - name: Set environment
+        run: |
+          echo "PS3DEV=/usr/local/ps3dev"       >> $GITHUB_ENV
+          echo "PSL1GHT=/usr/local/ps3dev"       >> $GITHUB_ENV
+          echo "/usr/local/ps3dev/bin"            >> $GITHUB_PATH
+          echo "/usr/local/ps3dev/ppu/bin"        >> $GITHUB_PATH
+          echo "/usr/local/ps3dev/spu/bin"        >> $GITHUB_PATH
 
       - name: Build PS3SHH PKG
         run: make pkg
