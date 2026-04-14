@@ -1,6 +1,10 @@
 name: Build PS3SHH
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
@@ -10,38 +14,37 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Instalar Python 2 (O Legado do Mal)
+      - name: Download ps3dev toolchain
         run: |
-          sudo add-apt-repository ppa:deadsnakes/ppa -y
-          sudo apt update
-          sudo apt install -y python2.7 wget build-essential
-          # Cria os links pro Makefile não se perder
-          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
-          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
+          wget -q https://github.com/bucanero/ps3toolchain/releases/download/ubuntu-latest-fad3b5fb/ps3dev-ubuntu-latest-2020-08-31.tar.gz
+          # Extraindo direto para /usr/local como no seu CapMAN
+          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C /usr/local
+          rm ps3dev-ubuntu-latest-2020-08-31.tar.gz
 
-      - name: Instalar Toolchain Bucanero
+      - name: Set environment
         run: |
-          wget https://github.com/bucanero/ps3toolchain/releases/download/ubuntu-latest-fad3b5fb/ps3dev-ubuntu-latest-2020-08-31.tar.gz
-          # O '|| true' ignora erros de link físico nas man pages pra não travar o build
-          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C / || true
-          
-      - name: Configurar Variaveis de Ambiente
-        run: |
-          echo "PS3DEV=/usr/local/ps3dev" >> $GITHUB_ENV
+          echo "PS3DEV=/usr/local/ps3dev"  >> $GITHUB_ENV
           echo "PSL1GHT=/usr/local/ps3dev" >> $GITHUB_ENV
-          # Adiciona os binários da PPU e da SPU no PATH
-          echo "/usr/local/ps3dev/bin" >> $GITHUB_PATH
-          echo "/usr/local/ps3dev/ppu/bin" >> $GITHUB_PATH
+          echo "/usr/local/ps3dev/bin"      >> $GITHUB_PATH
+          echo "/usr/local/ps3dev/ppu/bin"  >> $GITHUB_PATH
 
-      - name: Build do PKG
+      - name: Instalar Python 2 e Dependências
         run: |
-          # Confirma se o powerpc64-ps3-elf-gcc tá vivo
-          ls -l /usr/local/ps3dev/ppu/bin/powerpc64-ps3-elf-gcc
+          sudo apt update
+          # Usando o que funcionou no seu outro repo + o link do python
+          sudo apt install -y python2 libelf-dev zlib1g-dev
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          sudo ln -sf /usr/bin/python2 /usr/bin/python2
+
+      - name: Build PKG
+        run: |
+          # Se o seu Makefile gera o arquivo com nome minúsculo ou maiúsculo, 
+          # garanta que o comando 'make' seja o principal aqui.
           make clean
           make pkg
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PS3SHH-Installer
+          name: PS3SHH-Package
           path: "*.pkg"
