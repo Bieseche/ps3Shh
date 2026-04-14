@@ -1,54 +1,66 @@
 #---------------------------------------------------------------------------------
 # PS3 SafeHDD Health — v1.1
-# Makefile para ps3dev / PSL1GHT (toolchain bucanero)
-#
-# PS3DEV=/usr/local/ps3dev
-# PSL1GHT=/usr/local/ps3dev/psl1ght  ← subpasta dentro do ps3dev
-#---------------------------------------------------------------------------------
+# 
+#--------------------------------------------------------------------------------
 
-TARGET  := PS3SHH
-TITLE   := PS3 SafeHDD Health
-APPID   := SHDD00001
-VERSION := 01.01
+TARGET    := PS3SHH
+APPID     := SHDD00001
+CONTENTID := UP0001-$(APPID)_00-0000000000000000
 
-SRCS := \
-    main.c      \
-    scanner.c   \
-    mapper.c    \
-    renderer.c  \
-    sound.c     \
-    report.c    \
-    saferead.c
+PS3DEV  ?= /usr/local/ps3dev
+PSL1GHT ?= $(PS3DEV)
 
-INCDIRS := .
+CC         := $(PS3DEV)/ppu/bin/ppu-gcc
+LD         := $(PS3DEV)/ppu/bin/ppu-gcc
+STRIP      := $(PS3DEV)/ppu/bin/ppu-strip
+FSELF      := $(PS3DEV)/bin/fself
+SFO        := $(PS3DEV)/bin/sfo.py
+PKG        := $(PS3DEV)/bin/pkg.py
 
-# ppu_rules já adiciona $(PSL1GHT)/ppu/lib automaticamente
-# Só precisamos das libs — sem LIBDIRS manual
-LIBS := -lrsx -lgcm_sys -laudio -lsysutil -lio -lm -lpthread -llv2
 
-CFLAGS := \
-    -O2            \
-    -Wall          \
-    -Wextra        \
-    -std=c99       \
-    -mhard-float   \
-    -fno-strict-aliasing
+SRCS := main.c scanner.c mapper.c renderer.c sound.c report.c saferead.c
+OBJS := $(SRCS:.c=.o)
 
-#-- font8x8.h é header-only, não precisa de .c
+# Headers e Flags
+INCDIRS := . $(PSL1GHT)/ppu/include $(PSL1GHT)/ppu/include/ppu-lv2
+CFLAGS  := -O2 -Wall -Wextra -fno-builtin -mhard-float -fshort-wchar --sysroot=$(PS3DEV)/ppu $(addprefix -I,$(INCDIRS))
+LIBDIRS := $(PSL1GHT)/ppu/lib
 
-include $(PSL1GHT)/ppu_rules
+# Bibliotecas para o sistema de Health Check
+LIBS := -lrsx -lgcm_sys -laudio -lsysutil -lio -lrt -lm
 
-#-- Targets PKG / SELF / ELF
-pkg: $(TARGET).pkg
+LDFLAGS := -L$(LIBDIRS) -Wl,--gc-sections
 
-$(TARGET).pkg: $(TARGET).self
-	@echo "  PKG    $@"
-	$(PKG_FINALIZE) $@ $(TARGET).self ICON0.PNG
+.PHONY: all pkg clean
 
-$(TARGET).self: $(TARGET).elf
-	@echo "  SELF   $@"
-	$(MAKE_FSELF) $< $@
+all: pkg
 
-.PHONY: clean
+# Regra de compilação dos objetos
+%.o: %.c
+	@echo "  CC     $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Linkagem do ELF
+$(TARGET).elf: $(OBJS)
+	@echo "  LD     $@"
+	@$(LD) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
+	@$(STRIP) -s $@
+
+# Construção do PKG 
+pkg: $(TARGET).elf
+	@echo "  PKG    Construindo estrutura..."
+	@mkdir -p pkg/USRDIR
+	@# Aqui o ELF vira o EBOOT principal
+	$(FSELF) $(TARGET).elf pkg/USRDIR/EBOOT.BIN
+	@# Se você tiver um ICON0.PNG no repo, descomente a linha abaixo
+	@# cp ICON0.PNG pkg/ICON0.PNG
+	@echo "  SFO    Gerando PARAM.SFO..."
+	python $(SFO) --title "PS3 SafeHDD Health" --appid "$(APPID)" -f pkg/sfo.xml pkg/PARAM.SFO
+	@echo "  PACK   Gerando $(TARGET).pkg..."
+	python $(PKG) --contentid $(CONTENTID) pkg/ $(TARGET).pkg
+	@echo "PKG pronto para o combate."
+
 clean:
-	rm -f $(TARGET).elf $(TARGET).self $(TARGET).pkg $(OBJS)
+	@echo "  CLEAN  Limpando a bagunça..."
+	rm -f *.o *.elf *.map pkg/USRDIR/EBOOT.BIN pkg/PARAM.SFO *.pkg
+	rm -rf pkg/
