@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <malloc.h> // Necessário para o memalign
+#include <malloc.h>
 
 #include <sys/process.h>
 #include <sysutil/sysutil.h>
@@ -29,7 +29,6 @@
 static gcmContextData *rsx_ctx = NULL;
 
 static void rsx_init(void) {
-    // memalign agora visível via malloc.h
     void *host = memalign(1024 * 1024, HOST_SIZE);
     rsxInit(&rsx_ctx, CB_SIZE, HOST_SIZE, host);
     renderer_init();
@@ -50,15 +49,15 @@ static inline int pad_pressed(PadState *p, uint32_t btn) {
     return (p->held & btn) && !(p->prev & btn);
 }
 
-/* ── Definições de Botões (Compatibilidade PSL1GHT) ─────────────────────── */
-// Caso o seu header não defina esses nomes, usamos os mapeamentos padrão
-#define BTN_CROSS    PAD_OK
-#define BTN_TRIANGLE BTN_BD_TRIANGLE
-#define BTN_CIRCLE   PAD_CROSS
-#define BTN_SELECT   BTN_BD_SELECT
+/* ── Definições de Botões (Padrão PSL1GHT / Libpad) ─────────────────────── */
+// Usando as máscaras de bits diretas para evitar erro de 'undeclared'
+#define BTN_SELECT   0x0100
+#define BTN_CROSS    0x4000
+#define BTN_CIRCLE   0x2000
+#define BTN_TRIANGLE 0x1000
 
 /* ── Notificação de relatório (exibe por N frames) ──────────────────────── */
-#define REPORT_NOTIFY_FRAMES  180   /* ~3 segundos a 60fps */
+#define REPORT_NOTIFY_FRAMES  180 
 
 /* ── Loop principal ─────────────────────────────────────────────────────── */
 int main(void) {
@@ -72,14 +71,13 @@ int main(void) {
     scanner_init(&scan, MAX_BLOCKS);
     mapper_build(&grid, &scan);
 
-    // Corrigido: padInfo e padData (minúsculo)
     padInfo  pad_info;
     padData  pad_data;
     PadState pad = { 0, 0 };
 
     uint32_t frame_counter   = 0;
     int      scan_index      = 0;
-    int      report_notify   = 0;   /* frames restantes de notificação */
+    int      report_notify   = 0;
 
     while (!quit_flag) {
         sysUtilCheckCallback();
@@ -88,16 +86,14 @@ int main(void) {
         pad.prev = pad.held;
         pad.held = 0;
         
-        // Corrigido: Passando a struct correta
         ioPadGetInfo(&pad_info);
         if (pad_info.status[0]) {
             ioPadGetData(0, &pad_data);
-            // Corrigido: Acessando .button corretamente conforme a struct padData
-            pad.held = pad_data.button[2]
-                     | ((uint32_t)pad_data.button[3] << 8);
+            // Pegando o estado dos botões digitais (offset 2 e 3)
+            pad.held = (uint32_t)pad_data.button[2] | ((uint32_t)pad_data.button[3] << 8);
         }
 
-        /* X → inicia scan (Mapeado para BTN_CROSS/PAD_OK) */
+        /* X → inicia scan */
         if (pad_pressed(&pad, BTN_CROSS) &&
             !scan.scan_active && !scan.scan_done) {
             scan.scan_active   = 1;
@@ -113,7 +109,7 @@ int main(void) {
             report_notify = 0;
         }
 
-        /* O → exporta relatório (só após scan completo) */
+        /* O → exporta relatório */
         if (pad_pressed(&pad, BTN_CIRCLE) && scan.scan_done) {
             if (report_export(&scan) == 0) {
                 report_notify = REPORT_NOTIFY_FRAMES;
@@ -123,10 +119,9 @@ int main(void) {
         /* SELECT → sair */
         if (pad_pressed(&pad, BTN_SELECT)) break;
 
-        /* ── Scan incremental: 1 bloco por frame ── */
+        /* ── Scan incremental ── */
         if (scan.scan_active && scan_index < (int)scan.total) {
             scan.current_index = scan_index;
-
             scanner_scan_block(&scan, (uint32_t)scan_index);
 
             if (scan.blocks[scan_index].status == BLOCK_BAD)
@@ -143,7 +138,6 @@ int main(void) {
             }
         }
 
-        /* ── Tick da notificação ── */
         if (report_notify > 0) report_notify--;
 
         /* ── Render ── */
