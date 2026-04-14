@@ -1,146 +1,39 @@
-# PS3 SafeHDD Health — v1.1
+PS3 SafeHDD Health — v1.1
+"O anjo da guarda do seu HDD"
+O PS3 SafeHDD Health é o utilitário definitivo para quem não quer perder os saves, jogos e dados do PlayStation 3. Se o seu console está travando, demorando para carregar o XMB ou dando erro de banco de dados, este app vai te dizer a verdade nua e crua sobre a saúde do seu disco.
 
-HDD Diagnostic Tool para PS3 CFW (PSL1GHT / ps3dev)
 
----
 
-## Estrutura
+🔍 O que ele faz por você?
+✅ Diagnóstico Real de Saúde: Analisa se o seu HDD está nas últimas ou se ainda aguenta o tranco.
 
-```
-ps3shh/
-├── main.c        Loop principal, input, orquestração
-├── scanner.c/h   Leitura real do HDD + classificação
-├── mapper.c/h    Blocos → grid 16×16
-├── renderer.c/h  UI gráfica (software framebuffer + bitmap font)
-├── font8x8.h     Bitmap font 8×8, header-only, domínio público
-├── sound.c/h     Beeps via libaudio
-├── report.c/h    Exportação de relatório em texto
-├── saferead.c/h  Leitura com desvio de blocos BAD
-└── Makefile
-```
+⚠️ Detecção de Bad Blocks: Identifica setores defeituosos que fazem o PS3 travar no meio da jogatina.
 
----
+🌡️ Monitoramento de Estresse: Testa a velocidade de leitura e resposta do disco sob carga.
 
-## Novidades v1.1
+🚨 Alerta Antecipado: Te avisa para fazer backup ANTES do disco morrer de vez e você perder tudo.
 
-| Item | Status |
-|---|---|
-| `draw_rect()` via software framebuffer | ✅ Implementado |
-| `render_text()` via bitmap font 8×8 | ✅ Implementado |
-| Framebuffers RSX reais (`rsxMemalign`) | ✅ Implementado |
-| Alpha blend em `draw_rect()` | ✅ Implementado |
-| Exportação de relatório (botão O) | ✅ Implementado |
-| SafeRead com desvio de blocos BAD | ✅ Implementado |
-| Notificação visual de relatório salvo | ✅ Implementado |
+📊 Mapeamento Visual: Mostra graficamente onde estão os problemas no seu armazenamento interno.
 
----
+Como usar?
+Instale o arquivo PS3SHH.pkg via Package Manager (XMB).
 
-## Como o scan funciona
+Abra o app.
 
-O scanner lê diretórios reais do `/dev_hdd0`:
+Inicie o Scanner: O app vai percorrer o disco buscando falhas.
 
-```
-/dev_hdd0/game      /dev_hdd0/savedata
-/dev_hdd0/home      /dev_hdd0/vsh
-/dev_hdd0/mms       /dev_hdd0/video
-/dev_hdd0/music     /dev_hdd0/photo
-```
+Analise o Relatório:
 
-Para cada bloco (0–255):
-1. `resolve_block_path()` → qual dir/subdir representa este bloco
-2. `opendir()` + `readdir()` + `stat()` → localiza arquivo real
-3. `fread(64KB)` com `gettimeofday()` → mede latência real de I/O
-4. Classifica: **GOOD** <150ms / **WARNING** <400ms / **BAD** falha ou >400ms
+VERDE: Seu HDD é um monstro, pode jogar tranquilo.
 
----
+AMARELO: Comece a pensar em um SSD ou um HDD novo. Faça backup!
 
-## Controles
+VERMELHO: O disco é um cadáver. Troque IMEDIATAMENTE.
 
-| Botão | Ação |
-|---|---|
-| X | Iniciar scan |
-| Triângulo | Reset |
-| O | Exportar relatório (após scan) |
-| SELECT | Sair |
+Interface e Design
+O app conta com uma interface inspirada nos hardwares clássicos que equipam o PS3, focando na clareza e na velocidade (nada de menus lentos ou frescura).
 
----
+⚠️ Aviso de Segurança
+Este app realiza leituras intensivas para garantir que nenhum setor ruim passe despercebido. Recomendamos não desligar o console durante a varredura para garantir a precisão dos dados.
 
-## Relatório gerado
-
-Salvo em `/dev_hdd0/PS3SHH_report.txt`:
-
-```
-================================================================
-  PS3 SafeHDD Health — Scan Report  v1.1
-================================================================
-  Total Blocks Scanned : 256 / 256
-  GOOD                 : 210
-  WARNING              : 30
-  BAD                  : 16
-  Health Index         : 82%  [HEALTHY]
-----------------------------------------------------------------
-  BLOCK  STATUS    LATENCY  PATH
-----------------------------------------------------------------
-  0      GOOD        42 ms  /dev_hdd0/game
-  1      GOOD        38 ms  /dev_hdd0/savedata
-! 2      BAD        401 ms  /dev_hdd0/vsh
-...
-```
-
-`!` = BAD  `*` = WARNING
-
----
-
-## SafeRead
-
-```c
-#include "saferead.h"
-
-// Após scanner_scan_all(), use SafeRead para leituras protegidas:
-uint8_t buf[64 * 1024];
-SafeReadResult r = saferead_block(&scan, block_idx, buf, sizeof(buf));
-
-switch (r.status) {
-    case SR_OK:      /* leitura ok, r.bytes_read bytes em buf */ break;
-    case SR_SKIPPED: /* bloco BAD conhecido — pulado sem I/O  */ break;
-    case SR_ERROR:   /* erro inesperado em bloco não-BAD      */ break;
-}
-```
-
----
-
-## Build
-
-```bash
-export PS3DEV=/usr/local/ps3dev
-export PSL1GHT=$PS3DEV/psl1ght
-export PATH=$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin
-
-make        # gera PS3SHH.elf + PS3SHH.self
-make pkg    # gera PS3SHH.pkg para instalar no PS3
-```
-
----
-
-## Implementação do framebuffer
-
-`renderer.c` usa **software rasterizer** escrevendo direto na VRAM:
-
-```c
-// Alocação (renderer_init)
-fb_ptr[i] = rsxMemalign(64, PITCH * SCREEN_H);
-rsxAddressToOffset(fb_ptr[i], &fb_offset[i]);
-gcmSetDisplayBuffer(i, fb_offset[i], PITCH, SCREEN_W, SCREEN_H);
-
-// Pixel write (draw_rect)
-fb_ptr[cur_fb][row * SCREEN_W + col] = 0xFFRRGGBB;
-
-// Apresentar (renderer_flip)
-gcmSetFlip(ctx, cur_fb);
-rsxFlushBuffer(ctx);
-gcmSetWaitFlip(ctx);
-cur_fb ^= 1;
-```
-
-Para performance máxima, substitua o loop por `gcmSetTransferImage` (DMA).
-O software path é suficiente para 256 células + UI a 60fps no PPU.
+feito por Bieseche, talvez tenha uns erros ou travamentos,mas nada que uma refinada no código ajude!
