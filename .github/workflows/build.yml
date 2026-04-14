@@ -1,59 +1,40 @@
 name: Build PS3SHH
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
+      # O GitHub já se vira com a permissão aqui, relaxa
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Instalar dependências
+      - name: Instalar Python e Wget
         run: |
           sudo apt update
-          sudo apt install -y \
-            build-essential autoconf automake bison flex \
-            libgmp-dev libmpfr-dev libmpc-dev \
-            libelf-dev zlib1g-dev libtool \
-            python3 python-is-python3 \
-            wget git texinfo gettext
+          sudo apt install -y python3 python-is-python3 wget
 
-      - name: Cache ps3dev toolchain
-        id: cache-ps3dev
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/ps3dev
-          key: ps3dev-toolchain-v1
-
-      - name: Build ps3toolchain
-        if: steps.cache-ps3dev.outputs.cache-hit != 'true'
+      - name: Baixar Toolchain (Binário Pronto)
         run: |
-          git clone https://github.com/ps3dev/ps3toolchain.git
-          cd ps3toolchain
-          export PS3DEV=/usr/local/ps3dev
-          export PSL1GHT=$PS3DEV
-          export PATH=$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin
-          sudo -E bash toolchain.sh 2>&1
-
-      - name: Set environment
+          wget https://github.com/bucanero/ps3toolchain/releases/download/ubuntu-latest-fad3b5fb/ps3dev-ubuntu-latest-2020-08-31.tar.gz
+          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C /
+          
+      - name: Configurar Ambiente
         run: |
-          echo "PS3DEV=/usr/local/ps3dev"       >> $GITHUB_ENV
-          echo "PSL1GHT=/usr/local/ps3dev"       >> $GITHUB_ENV
-          echo "/usr/local/ps3dev/bin"            >> $GITHUB_PATH
-          echo "/usr/local/ps3dev/ppu/bin"        >> $GITHUB_PATH
-          echo "/usr/local/ps3dev/spu/bin"        >> $GITHUB_PATH
+          echo "PS3DEV=/usr/local/ps3dev" >> $GITHUB_ENV
+          echo "PSL1GHT=/usr/local/ps3dev" >> $GITHUB_ENV
+          echo "/usr/local/ps3dev/bin" >> $GITHUB_PATH
+          echo "/usr/local/ps3dev/ppu/bin" >> $GITHUB_PATH
 
-      - name: Build PS3SHH PKG
-        run: make pkg
+      - name: Build PKG
+        run: |
+          # Aqui ele vai achar seus .c que o checkout trouxe
+          make pkg
 
-      - name: Upload Artifact
+      - name: Upload do PKG
         uses: actions/upload-artifact@v4
         with:
           name: PS3SHH-Package
-          path: PS3SHH.pkg
+          path: "*.pkg"
