@@ -7,34 +7,41 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # O GitHub já se vira com a permissão aqui, relaxa
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Instalar Python e Wget
+      - name: Instalar Python 2 (O Legado do Mal)
         run: |
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
           sudo apt update
-          sudo apt install -y python3 python-is-python3 wget
+          sudo apt install -y python2.7 wget build-essential
+          # Cria os links pro Makefile não se perder
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
 
-      - name: Baixar Toolchain (Binário Pronto)
+      - name: Instalar Toolchain Bucanero
         run: |
           wget https://github.com/bucanero/ps3toolchain/releases/download/ubuntu-latest-fad3b5fb/ps3dev-ubuntu-latest-2020-08-31.tar.gz
-          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C /
+          # O '|| true' ignora erros de link físico nas man pages pra não travar o build
+          sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C / || true
           
-      - name: Configurar Ambiente
+      - name: Configurar Variaveis de Ambiente
         run: |
           echo "PS3DEV=/usr/local/ps3dev" >> $GITHUB_ENV
           echo "PSL1GHT=/usr/local/ps3dev" >> $GITHUB_ENV
+          # Adiciona os binários da PPU e da SPU no PATH
           echo "/usr/local/ps3dev/bin" >> $GITHUB_PATH
           echo "/usr/local/ps3dev/ppu/bin" >> $GITHUB_PATH
 
-      - name: Build PKG
+      - name: Build do PKG
         run: |
-          # Aqui ele vai achar seus .c que o checkout trouxe
+          # Confirma se o powerpc64-ps3-elf-gcc tá vivo
+          ls -l /usr/local/ps3dev/ppu/bin/powerpc64-ps3-elf-gcc
+          make clean
           make pkg
 
-      - name: Upload do PKG
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PS3SHH-Package
+          name: PS3SHH-Installer
           path: "*.pkg"
