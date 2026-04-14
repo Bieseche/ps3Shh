@@ -1,11 +1,9 @@
 #---------------------------------------------------------------------------------
 # PS3 SafeHDD Health — v1.1
-# Makefile para ps3dev / PSL1GHT
+# Makefile para ps3dev / PSL1GHT (toolchain bucanero)
 #
-# Requisitos:
-#   export PS3DEV=/usr/local/ps3dev
-#   export PSL1GHT=$PS3DEV/psl1ght
-#   export PATH=$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin
+# PS3DEV=/usr/local/ps3dev
+# PSL1GHT=/usr/local/ps3dev/psl1ght  ← subpasta dentro do ps3dev
 #---------------------------------------------------------------------------------
 
 TARGET  := PS3SHH
@@ -23,8 +21,9 @@ SRCS := \
     saferead.c
 
 INCDIRS := .
-LIBDIRS :=
 
+# ppu_rules já adiciona $(PSL1GHT)/ppu/lib automaticamente
+# Só precisamos das libs — sem LIBDIRS manual
 LIBS := -lrsx -lgcm_sys -laudio -lsysutil -lio -lm -lpthread -llv2
 
 CFLAGS := \
