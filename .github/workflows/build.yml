@@ -20,14 +20,22 @@ jobs:
           sudo tar -xzf ps3dev-ubuntu-latest-2020-08-31.tar.gz -C /usr/local
           rm ps3dev-ubuntu-latest-2020-08-31.tar.gz
 
-      - name: Instalar Python 2 e Dependências
+      - name: Instalar Python 2 via Deadsnakes
         run: |
+          # Adiciona o PPA Deadsnakes para ter acesso ao Python 2.7 no Ubuntu 22.04
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
           sudo apt update
-          # Instalando python2 e bibliotecas necessárias para o linker e scripts
-          sudo apt install -y python2 libelf-dev zlib1g-dev python-is-python2
-          # Garante o link simbólico para matar o erro de "Too many levels"
+          sudo apt install -y python2.7 libelf-dev zlib1g-dev
+          
+          # Limpeza total dos links zoados (Too many levels of symbolic links)
           sudo rm -f /usr/bin/python
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          sudo rm -f /usr/bin/python2
+          
+          # Cria os links novos apontando para o 2.7
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+          
+          # Check de sanidade
           python --version
 
       - name: Set environment
@@ -39,9 +47,13 @@ jobs:
 
       - name: Build PKG
         run: |
-          # Adicionando permissão de execução nos scripts da SDK só por segurança
+          # Garante que os scripts da SDK tenham permissão
           sudo chmod +x /usr/local/ps3dev/bin/*.py
           sudo chmod +x /usr/local/ps3dev/bin/fself
+          
+          # Se o ICON0.png estiver na pasta pkg, movemos para a raiz antes do clean
+          if [ -f pkg/ICON0.png ]; then mv pkg/ICON0.png ./; fi
+          
           make clean
           make pkg
 
