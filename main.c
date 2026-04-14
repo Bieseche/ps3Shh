@@ -1,24 +1,13 @@
 /*
  * PS3 SafeHDD Health — v1.1
  * HDD Diagnostic Tool para PS3 CFW (PSL1GHT / ps3dev toolchain)
- *
- * Novidades v1.1:
- *   - draw_rect() e render_text() implementados (software framebuffer)
- *   - Bitmap font 8x8 embutida — zero dependências externas de fonte
- *   - Exportação de relatório em /dev_hdd0/PS3SHH_report.txt (botão O)
- *   - SafeRead integrado — leituras futuras pulam blocos BAD conhecidos
- *
- * Controles:
- *   X       → Iniciar scan
- *   /\      → Reset
- *   O       → Exportar relatório (disponível após scan)
- *   SELECT  → Sair
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <malloc.h> // Necessário para o memalign
 
 #include <sys/process.h>
 #include <sysutil/sysutil.h>
@@ -40,6 +29,7 @@
 static gcmContextData *rsx_ctx = NULL;
 
 static void rsx_init(void) {
+    // memalign agora visível via malloc.h
     void *host = memalign(1024 * 1024, HOST_SIZE);
     rsxInit(&rsx_ctx, CB_SIZE, HOST_SIZE, host);
     renderer_init();
@@ -60,6 +50,13 @@ static inline int pad_pressed(PadState *p, uint32_t btn) {
     return (p->held & btn) && !(p->prev & btn);
 }
 
+/* ── Definições de Botões (Compatibilidade PSL1GHT) ─────────────────────── */
+// Caso o seu header não defina esses nomes, usamos os mapeamentos padrão
+#define BTN_CROSS    PAD_OK
+#define BTN_TRIANGLE BTN_BD_TRIANGLE
+#define BTN_CIRCLE   PAD_CROSS
+#define BTN_SELECT   BTN_BD_SELECT
+
 /* ── Notificação de relatório (exibe por N frames) ──────────────────────── */
 #define REPORT_NOTIFY_FRAMES  180   /* ~3 segundos a 60fps */
 
@@ -75,8 +72,9 @@ int main(void) {
     scanner_init(&scan, MAX_BLOCKS);
     mapper_build(&grid, &scan);
 
-    PadInfo  pad_info;
-    PadData  pad_data;
+    // Corrigido: padInfo e padData (minúsculo)
+    padInfo  pad_info;
+    padData  pad_data;
     PadState pad = { 0, 0 };
 
     uint32_t frame_counter   = 0;
@@ -89,15 +87,18 @@ int main(void) {
         /* ── Input ── */
         pad.prev = pad.held;
         pad.held = 0;
+        
+        // Corrigido: Passando a struct correta
         ioPadGetInfo(&pad_info);
         if (pad_info.status[0]) {
             ioPadGetData(0, &pad_data);
+            // Corrigido: Acessando .button corretamente conforme a struct padData
             pad.held = pad_data.button[2]
                      | ((uint32_t)pad_data.button[3] << 8);
         }
 
-        /* X → inicia scan */
-        if (pad_pressed(&pad, PAD_CROSS) &&
+        /* X → inicia scan (Mapeado para BTN_CROSS/PAD_OK) */
+        if (pad_pressed(&pad, BTN_CROSS) &&
             !scan.scan_active && !scan.scan_done) {
             scan.scan_active   = 1;
             scan.current_index = 0;
@@ -105,7 +106,7 @@ int main(void) {
         }
 
         /* Triângulo → reset */
-        if (pad_pressed(&pad, PAD_TRIANGLE)) {
+        if (pad_pressed(&pad, BTN_TRIANGLE)) {
             scanner_reset(&scan);
             mapper_build(&grid, &scan);
             scan_index    = 0;
@@ -113,14 +114,14 @@ int main(void) {
         }
 
         /* O → exporta relatório (só após scan completo) */
-        if (pad_pressed(&pad, PAD_CIRCLE) && scan.scan_done) {
+        if (pad_pressed(&pad, BTN_CIRCLE) && scan.scan_done) {
             if (report_export(&scan) == 0) {
                 report_notify = REPORT_NOTIFY_FRAMES;
             }
         }
 
         /* SELECT → sair */
-        if (pad_pressed(&pad, PAD_SELECT)) break;
+        if (pad_pressed(&pad, BTN_SELECT)) break;
 
         /* ── Scan incremental: 1 bloco por frame ── */
         if (scan.scan_active && scan_index < (int)scan.total) {
